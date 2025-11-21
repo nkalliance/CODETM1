@@ -3,10 +3,10 @@
 
 // ======================= MODE & STEP =====================
 // 0 = P only, 1 = PI, 2 = PD, 3 = PID
-#define MODE 3              
+#define MODE 3
 
 // Setpoint akan 0 derajat dulu, lalu pindah ke STEP_TARGET setelah 2 detik
-#define STEP_TARGET 10.0    
+#define STEP_TARGET 10.0
 
 class MPU6050 {
   private:
@@ -22,8 +22,8 @@ class MPU6050 {
     void begin() {
       Wire.begin();
       writeRegister(0x6B, 0x00);
-      writeRegister(0x1C, 0x08); 
-      writeRegister(0x1B, 0x08); 
+      writeRegister(0x1C, 0x08);
+      writeRegister(0x1B, 0x08);
       lastMillis = millis();
     }
 
@@ -67,7 +67,8 @@ class MPU6050 {
     }
 
     void printData() {
-      Serial.print("Angle: "); Serial.println(fusedAngle);
+      Serial.print("Angle: ");
+      Serial.println(fusedAngle);
     }
 
   private:
@@ -82,11 +83,12 @@ class MPU6050 {
 MPU6050 imu;
 const int servoPin = 4;
 
+// ======================= SERVO ============================
 void writeServoMicros(int pin, int pulseMicros) {
   digitalWrite(pin, HIGH);
   delayMicroseconds(pulseMicros);
   digitalWrite(pin, LOW);
-  delayMicroseconds(20000 - pulseMicros); 
+  delayMicroseconds(20000 - pulseMicros);
 }
 
 int angleToPulse(int angle) {
@@ -97,7 +99,7 @@ int angleToPulse(int angle) {
 
 // ======================= PID ============================
 float Kp = 8.0;
-float Ki = 0.0;
+float Ki = 0.6;
 float Kd = 1.2;
 
 float setpoint = 1.0;
@@ -105,6 +107,7 @@ float integral = 0.0;
 float lastError = 0.0;
 
 unsigned long lastPID = 0;
+unsigned long lastIMU = 0;   // <--- DITAMBAHKAN
 
 void setup() {
   Serial.begin(115200);
@@ -115,14 +118,19 @@ void setup() {
 }
 
 void loop() {
-  imu.readData();
+
+  // ================= LIMIT PEMBACAAN IMU (ANTI ERROR 263) ================
+  if (millis() - lastIMU >= 5) {    // 200 Hz pembacaan
+    imu.readData();
+    lastIMU = millis();
+  }
 
   unsigned long now = millis();
   float dt = (now - lastPID) / 1000.0f;
   if (dt <= 0) dt = 0.001;
   if (dt > 0.2) dt = 0.02;
 
-  // ===== STEP INPUT: 0 derajat dulu, lalu loncat ke STEP_TARGET =====
+  // ===== STEP INPUT =====
   if (now < 2000) {
     setpoint = 0.0;
   } else {
@@ -132,24 +140,20 @@ void loop() {
   float measured = imu.getAngle();
   float error = setpoint - measured;
 
-  // ===== P TERM (selalu aktif) =====
   float P = Kp * error;
 
-  // ===== I TERM (aktif hanya di MODE 1 & 3) =====
+  // ===== I TERM =====
   integral += error * dt;
   if (integral > 300) integral = 300;
   if (integral < -300) integral = -300;
-  float I = 0;
-  if (MODE == 1 || MODE == 3) {
-    I = Ki * integral;
-  }
 
-  // ===== D TERM (aktif hanya di MODE 2 & 3) =====
+  float I = 0;
+  if (MODE == 1 || MODE == 3) I = Ki * integral;
+
+  // ===== D TERM =====
   float derivative = (error - lastError) / dt;
   float D = 0;
-  if (MODE == 2 || MODE == 3) {
-    D = Kd * derivative;
-  }
+  if (MODE == 2 || MODE == 3) D = Kd * derivative;
 
   float output = P + I + D;
 
@@ -161,12 +165,14 @@ void loop() {
   int pulseMicros = angleToPulse((int)servoAngle);
   writeServoMicros(servoPin, pulseMicros);
 
-  Serial.print("Set: "); Serial.print(setpoint);
+  // ========== MONITORING ==========
+  Serial.print("Set: ");   Serial.print(setpoint);
   Serial.print(" | Angle: "); Serial.print(measured);
   Serial.print(" | Out: "); Serial.print(output);
   Serial.print(" | Servo: "); Serial.println(servoAngle);
 
   lastError = error;
   lastPID = now;
+
   delay(10);
 }
