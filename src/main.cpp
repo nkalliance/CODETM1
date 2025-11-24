@@ -1,5 +1,6 @@
 #include <Wire.h>
 #include <Arduino.h>
+#include <ESP32Servo.h>
 
 // ======================= MODE & STEP =====================
 #define MODE 3              
@@ -129,42 +130,47 @@ class MPU6050 {
 // ======================= OBJECT ============================
 MPU6050 imu;
 
-// ======================= SERVO (LEDC – ESP32) ================
-const int servoPin = 4;
-const int pwmChannel = 0;
-const int pwmFrequency = 50;         // servo = 50Hz
-const int pwmResolution = 16;        // 16-bit resolution
+// ======================= SERVO (ESP32) ================
+const int servoPin = 13;
+//const int pwmChannel = 0;
+//const int pwmFrequency = 50;         // servo = 50Hz
+//const int pwmResolution = 16;        // 16-bit resolution
 
-void writeServoAngle(float angle) {
-  if (angle < 0) angle = 0;
-  if (angle > 180) angle = 180;
+//void writeServoAngle(float angle) {
+  //if (angle < 0) angle = 0;
+  //if (angle > 180) angle = 180;
 
-  int pulseMicros = map(angle, 0, 180, 500, 2500);
-  int duty = (pulseMicros * 65535) / 20000;  
-  ledcWrite(pwmChannel, duty);
+  //int pulseMicros = map(angle, 0, 180, 500, 2500);
+  //int duty = (pulseMicros * 65535) / 20000;  
+  //ledcWrite(pwmChannel, duty);
+//}
+
+Servo myServo;
+
+
+// ======================= SETUP ============================
+void setup() {
+  Serial.begin(115200);
+  myServo.attach(servoPin, 500, 2500);
+
+
+  Wire.begin();
+  imu.begin();
+
+  //ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
+  //ledcAttachPin(servoPin, pwmChannel);
 }
 
 // ======================= PID ============================
-float Kp = 20.0;
-float Ki = 0.0;
-float Kd = 10.0;
+float Kp = 30.0;
+float Ki = 2.0;
+float Kd = 15.0;
 
 float setpoint = 0.0;
 float integral = 0.0;
 float lastError = 0.0;
 
 unsigned long lastPID = 0;
-
-// ======================= SETUP ============================
-void setup() {
-  Serial.begin(115200);
-
-  Wire.begin();
-  imu.begin();
-
-  ledcSetup(pwmChannel, pwmFrequency, pwmResolution);
-  ledcAttachPin(servoPin, pwmChannel);
-}
 
 // ======================= LOOP =============================
 void loop() {
@@ -197,19 +203,17 @@ void loop() {
   float D = Kd * derivative;
 
   float output = P + I + D;
-  if (output > 200) output = 200;
-  if (output < -200) output = -200;
-
-  float servoAngle = map(output, -200, 200, 0, 180);
-  writeServoAngle(servoAngle);
+  output = constrain(output, -500, 500);
+  output = 1500 + output; 
+  myServo.writeMicroseconds((int)output);
 
   Serial.print("Set: "); Serial.print(setpoint);
   Serial.print(" | Angle: "); Serial.print(measured);
   Serial.print(" | Out: "); Serial.print(output);
-  Serial.print(" | Servo: "); Serial.println(servoAngle);
+  Serial.print(" | Servo: "); Serial.println(output);
 
   lastError = error;
   lastPID = now;
 
-  delay(5);
+  delay(20);
 }
