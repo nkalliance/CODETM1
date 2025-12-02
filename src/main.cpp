@@ -181,8 +181,9 @@ void loop() {
   if (dt <= 0) dt = 0.001;
   if (dt > 0.05) dt = 0.05;  // stabilizer 20Hz–200Hz
 
-  if (now < 2000) setpoint = 0.0;
-  else setpoint = STEP_TARGET;
+  
+  //if (now < 2000) setpoint = 0.0;
+  //else setpoint = STEP_TARGET;
 
   float measured = imu.getAngle();
   float error = setpoint - measured;
